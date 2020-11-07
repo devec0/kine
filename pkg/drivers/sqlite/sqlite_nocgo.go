@@ -7,8 +7,8 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/rancher/kine/pkg/drivers/generic"
-	"github.com/rancher/kine/pkg/server"
+	"github.com/devec0/kine/pkg/drivers/generic"
+	"github.com/devec0/kine/pkg/server"
 )
 
 var errNoCgo = errors.New("this binary is built without CGO, sqlite is disabled")

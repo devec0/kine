@@ -10,11 +10,11 @@ import (
 
 	"github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
-	"github.com/rancher/kine/pkg/drivers/generic"
-	"github.com/rancher/kine/pkg/logstructured"
-	"github.com/rancher/kine/pkg/logstructured/sqllog"
-	"github.com/rancher/kine/pkg/server"
-	"github.com/sirupsen/logrus"
+	"github.com/devec0/kine/pkg/drivers/generic"
+	"github.com/devec0/kine/pkg/logstructured"
+	"github.com/devec0/kine/pkg/logstructured/sqllog"
+	"github.com/devec0/kine/pkg/server"
+	log "k8s.io/klog/v2"
 
 	// sqlite db driver
 	_ "github.com/mattn/go-sqlite3"
@@ -92,7 +92,7 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connPool
 		if err == nil {
 			break
 		}
-		logrus.Errorf("failed to setup db: %v", err)
+		log.Errorf("failed to setup db: %v", err)
 		select {
 		case <-ctx.Done():
 			return nil, nil, ctx.Err()
@@ -109,16 +109,16 @@ func NewVariant(ctx context.Context, driverName, dataSourceName string, connPool
 }
 
 func setup(db *sql.DB) error {
-	logrus.Infof("Configuring database table schema and indexes, this may take a moment...")
+	log.Infof("Configuring database table schema and indexes, this may take a moment...")
 
 	for _, stmt := range schema {
-		logrus.Tracef("SETUP EXEC : %v", generic.Stripped(stmt))
+		log.Infof("SETUP EXEC : %v", generic.Stripped(stmt))
 		_, err := db.Exec(stmt)
 		if err != nil {
 			return err
 		}
 	}
 
-	logrus.Infof("Database tables and indexes are up to date")
+	log.Infof("Database tables and indexes are up to date")
 	return nil
 }

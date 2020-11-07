@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/sirupsen/logrus"
+	log "k8s.io/klog/v2"
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 )
@@ -31,7 +31,7 @@ func (s *KVServerBridge) Watch(ws etcdserverpb.Watch_WatchServer) error {
 		if msg.GetCreateRequest() != nil {
 			w.Start(ws.Context(), msg.GetCreateRequest())
 		} else if msg.GetCancelRequest() != nil {
-			logrus.Tracef("WATCH CANCEL REQ id=%d", msg.GetCancelRequest().GetWatchId())
+			log.Infof("WATCH CANCEL REQ id=%d", msg.GetCancelRequest().GetWatchId())
 			w.Cancel(msg.GetCancelRequest().WatchId, nil)
 		}
 	}
@@ -58,7 +58,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 
 	key := string(r.Key)
 
-	logrus.Tracef("WATCH START id=%d, count=%d, key=%s, revision=%d", id, len(w.watches), key, r.StartRevision)
+	log.Infof("WATCH START id=%d, count=%d, key=%s, revision=%d", id, len(w.watches), key, r.StartRevision)
 
 	go func() {
 		defer w.wg.Done()
@@ -76,10 +76,8 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 				continue
 			}
 
-			if logrus.IsLevelEnabled(logrus.DebugLevel) {
-				for _, event := range events {
-					logrus.Tracef("WATCH READ id=%d, key=%s, revision=%d", id, event.KV.Key, event.KV.ModRevision)
-				}
+			for _, event := range events {
+				log.Infof("WATCH READ id=%d, key=%s, revision=%d", id, event.KV.Key, event.KV.ModRevision)
 			}
 
 			if err := w.server.Send(&etcdserverpb.WatchResponse{
@@ -92,7 +90,7 @@ func (w *watcher) Start(ctx context.Context, r *etcdserverpb.WatchCreateRequest)
 			}
 		}
 		w.Cancel(id, nil)
-		logrus.Tracef("WATCH CLOSE id=%d, key=%s", id, key)
+		log.Infof("WATCH CLOSE id=%d, key=%s", id, key)
 	}()
 }
 
@@ -130,7 +128,7 @@ func (w *watcher) Cancel(watchID int64, err error) {
 	if err != nil {
 		reason = err.Error()
 	}
-	logrus.Tracef("WATCH CANCEL id=%d reason=%s", watchID, reason)
+	log.Infof("WATCH CANCEL id=%d reason=%s", watchID, reason)
 	serr := w.server.Send(&etcdserverpb.WatchResponse{
 		Header:       &etcdserverpb.ResponseHeader{},
 		Canceled:     true,
@@ -138,7 +136,7 @@ func (w *watcher) Cancel(watchID int64, err error) {
 		WatchId:      watchID,
 	})
 	if serr != nil && err != nil {
-		logrus.Errorf("WATCH Failed to send cancel response for watchID %d: %v", watchID, serr)
+		log.Errorf("WATCH Failed to send cancel response for watchID %d: %v", watchID, serr)
 	}
 }
 
