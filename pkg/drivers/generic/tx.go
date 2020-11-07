@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/sirupsen/logrus"
+	log "k8s.io/klog/v2"
 )
 
 type Tx struct {
@@ -13,7 +13,7 @@ type Tx struct {
 }
 
 func (d *Generic) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
-	logrus.Tracef("TX BEGIN")
+	log.Infof("TX BEGIN")
 	x, err := d.DB.BeginTx(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -25,25 +25,25 @@ func (d *Generic) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error)
 }
 
 func (t *Tx) Commit() error {
-	logrus.Tracef("TX COMMIT")
+	log.Infof("TX COMMIT")
 	return t.x.Commit()
 }
 
 func (t *Tx) MustCommit() {
 	if err := t.Commit(); err != nil {
-		logrus.Fatalf("Transaction commit failed: %v", err)
+		log.Fatalf("Transaction commit failed: %v", err)
 	}
 }
 
 func (t *Tx) Rollback() error {
-	logrus.Tracef("TX ROLLBACK")
+	log.Infof("TX ROLLBACK")
 	return t.x.Rollback()
 }
 
 func (t *Tx) MustRollback() {
 	if err := t.Rollback(); err != nil {
 		if err != sql.ErrTxDone {
-			logrus.Fatalf("Transaction rollback failed: %v", err)
+			log.Fatalf("Transaction rollback failed: %v", err)
 		}
 	}
 }
@@ -59,13 +59,13 @@ func (t *Tx) GetCompactRevision(ctx context.Context) (int64, error) {
 }
 
 func (t *Tx) SetCompactRevision(ctx context.Context, revision int64) error {
-	logrus.Tracef("TX SETCOMPACTREVISION %v", revision)
+	log.Infof("TX SETCOMPACTREVISION %v", revision)
 	_, err := t.execute(ctx, t.d.UpdateCompactSQL, revision)
 	return err
 }
 
 func (t *Tx) Compact(ctx context.Context, revision int64) (int64, error) {
-	logrus.Tracef("TX COMPACT %v", revision)
+	log.Infof("TX COMPACT %v", revision)
 	res, err := t.execute(ctx, t.d.CompactSQL, revision, revision)
 	if err != nil {
 		return 0, err
@@ -78,7 +78,7 @@ func (t *Tx) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error)
 }
 
 func (t *Tx) DeleteRevision(ctx context.Context, revision int64) error {
-	logrus.Tracef("TX DELETEREVISION %v", revision)
+	log.Infof("TX DELETEREVISION %v", revision)
 	_, err := t.execute(ctx, t.d.DeleteSQL, revision)
 	return err
 }
@@ -94,16 +94,16 @@ func (t *Tx) CurrentRevision(ctx context.Context) (int64, error) {
 }
 
 func (t *Tx) query(ctx context.Context, sql string, args ...interface{}) (*sql.Rows, error) {
-	logrus.Tracef("TX QUERY %v : %s", args, Stripped(sql))
+	log.Infof("TX QUERY %v : %s", args, Stripped(sql))
 	return t.x.QueryContext(ctx, sql, args...)
 }
 
 func (t *Tx) queryRow(ctx context.Context, sql string, args ...interface{}) *sql.Row {
-	logrus.Tracef("TX QUERY ROW %v : %s", args, Stripped(sql))
+	log.Infof("TX QUERY ROW %v : %s", args, Stripped(sql))
 	return t.x.QueryRowContext(ctx, sql, args...)
 }
 
 func (t *Tx) execute(ctx context.Context, sql string, args ...interface{}) (result sql.Result, err error) {
-	logrus.Tracef("TX EXEC %v : %s", args, Stripped(sql))
+	log.Infof("TX EXEC %v : %s", args, Stripped(sql))
 	return t.x.ExecContext(ctx, sql, args...)
 }

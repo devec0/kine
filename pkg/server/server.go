@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sirupsen/logrus"
+	log "k8s.io/klog/v2"
+
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 	"go.etcd.io/etcd/mvcc/mvccpb"
 	"google.golang.org/grpc"
@@ -82,7 +83,7 @@ func (k *KVServerBridge) Range(ctx context.Context, r *etcdserverpb.RangeRequest
 
 	resp, err := k.limited.Range(ctx, r)
 	if err != nil {
-		logrus.Errorf("error while range on %s %s: %v", r.Key, r.RangeEnd, err)
+		log.Errorf("error while range on %s %s: %v", r.Key, r.RangeEnd, err)
 		return nil, err
 	}
 
@@ -135,7 +136,7 @@ func (k *KVServerBridge) DeleteRange(ctx context.Context, r *etcdserverpb.Delete
 func (k *KVServerBridge) Txn(ctx context.Context, r *etcdserverpb.TxnRequest) (*etcdserverpb.TxnResponse, error) {
 	res, err := k.limited.Txn(ctx, r)
 	if err != nil {
-		logrus.Errorf("error in txn: %v", err)
+		log.Errorf("error in txn: %v", err)
 	}
 	return res, err
 }

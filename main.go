@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/rancher/kine/pkg/endpoint"
+	"github.com/devec0/kine/pkg/endpoint"
 	"github.com/rancher/wrangler/pkg/signals"
-	"github.com/sirupsen/logrus"
+	log "k8s.io/klog/v2"
 	"github.com/urfave/cli"
 )
 
@@ -63,19 +63,16 @@ func main() {
 			Usage:       "Key file for DB connection",
 			Destination: &config.KeyFile,
 		},
-		cli.BoolFlag{Name: "debug"},
+		cli.IntFlag{Name: "v"},
 	}
 	app.Action = run
 
 	if err := app.Run(os.Args); err != nil {
-		logrus.Fatal(err)
+		log.Fatal(err)
 	}
 }
 
 func run(c *cli.Context) error {
-	if c.Bool("debug") {
-		logrus.SetLevel(logrus.TraceLevel)
-	}
 	ctx := signals.SetupSignalHandler(context.Background())
 	_, err := endpoint.Listen(ctx, config)
 	if err != nil {

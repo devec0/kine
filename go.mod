@@ -1,4 +1,4 @@
-module github.com/rancher/kine
+module github.com/devec0/kine
 
 go 1.12
 
@@ -10,7 +10,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.4
 	github.com/pkg/errors v0.8.1
 	github.com/rancher/wrangler v0.4.0
-	github.com/sirupsen/logrus v1.4.2
+	k8s.io/klog/v2 v2.4.0
 	github.com/urfave/cli v1.21.0
 	go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738
 	google.golang.org/grpc v1.23.1

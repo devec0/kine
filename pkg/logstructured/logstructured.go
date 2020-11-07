@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rancher/kine/pkg/server"
-	"github.com/sirupsen/logrus"
+	"github.com/devec0/kine/pkg/server"
+	log "k8s.io/klog/v2"
 )
 
 type Log interface {
@@ -36,7 +36,7 @@ func (l *LogStructured) Start(ctx context.Context) error {
 	// See https://github.com/kubernetes/kubernetes/blob/442a69c3bdf6fe8e525b05887e57d89db1e2f3a5/staging/src/k8s.io/apiserver/pkg/storage/storagebackend/factory/etcd3.go#L97
 	if _, err := l.Create(ctx, "/registry/health", []byte(`{"health":"true"}`), 0); err != nil {
 		if err != server.ErrKeyExists {
-			logrus.Errorf("Failed to create health check key: %v", err)
+			log.Errorf("Failed to create health check key: %v", err)
 		}
 	}
 	go l.ttl(ctx)
@@ -46,7 +46,7 @@ func (l *LogStructured) Start(ctx context.Context) error {
 func (l *LogStructured) Get(ctx context.Context, key string, revision int64) (revRet int64, kvRet *server.KeyValue, errRet error) {
 	defer func() {
 		l.adjustRevision(ctx, &revRet)
-		logrus.Tracef("GET %s, rev=%d => rev=%d, kv=%v, err=%v", key, revision, revRet, kvRet != nil, errRet)
+		log.Infof("GET %s, rev=%d => rev=%d, kv=%v, err=%v", key, revision, revRet, kvRet != nil, errRet)
 	}()
 
 	rev, event, err := l.get(ctx, key, revision, false)
@@ -87,7 +87,7 @@ func (l *LogStructured) adjustRevision(ctx context.Context, rev *int64) {
 func (l *LogStructured) Create(ctx context.Context, key string, value []byte, lease int64) (revRet int64, errRet error) {
 	defer func() {
 		l.adjustRevision(ctx, &revRet)
-		logrus.Tracef("CREATE %s, size=%d, lease=%d => rev=%d, err=%v", key, len(value), lease, revRet, errRet)
+		log.Infof("CREATE %s, size=%d, lease=%d => rev=%d, err=%v", key, len(value), lease, revRet, errRet)
 	}()
 
 	rev, prevEvent, err := l.get(ctx, key, 0, true)
@@ -119,7 +119,7 @@ func (l *LogStructured) Create(ctx context.Context, key string, value []byte, le
 func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) (revRet int64, kvRet *server.KeyValue, deletedRet bool, errRet error) {
 	defer func() {
 		l.adjustRevision(ctx, &revRet)
-		logrus.Tracef("DELETE %s, rev=%d => rev=%d, kv=%v, deleted=%v, err=%v", key, revision, revRet, kvRet != nil, deletedRet, errRet)
+		log.Infof("DELETE %s, rev=%d => rev=%d, kv=%v, deleted=%v, err=%v", key, revision, revRet, kvRet != nil, deletedRet, errRet)
 	}()
 
 	rev, event, err := l.get(ctx, key, 0, true)
@@ -160,7 +160,7 @@ func (l *LogStructured) Delete(ctx context.Context, key string, revision int64) 
 
 func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit, revision int64) (revRet int64, kvRet []*server.KeyValue, errRet error) {
 	defer func() {
-		logrus.Tracef("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
+		log.Infof("LIST %s, start=%s, limit=%d, rev=%d => rev=%d, kvs=%d, err=%v", prefix, startKey, limit, revision, revRet, len(kvRet), errRet)
 	}()
 
 	rev, events, err := l.log.List(ctx, prefix, startKey, limit, revision, false)
@@ -190,7 +190,7 @@ func (l *LogStructured) List(ctx context.Context, prefix, startKey string, limit
 
 func (l *LogStructured) Count(ctx context.Context, prefix string) (revRet int64, count int64, err error) {
 	defer func() {
-		logrus.Tracef("COUNT %s => rev=%d, count=%d, err=%v", prefix, revRet, count, err)
+		log.Infof("COUNT %s => rev=%d, count=%d, err=%v", prefix, revRet, count, err)
 	}()
 	rev, count, err := l.log.Count(ctx, prefix)
 	if err != nil {
@@ -216,7 +216,7 @@ func (l *LogStructured) Update(ctx context.Context, key string, value []byte, re
 		if kvRet != nil {
 			kvRev = kvRet.ModRevision
 		}
-		logrus.Tracef("UPDATE %s, value=%d, rev=%d, lease=%v => rev=%d, kvrev=%d, updated=%v, err=%v", key, len(value), revision, lease, revRet, kvRev, updateRet, errRet)
+		log.Infof("UPDATE %s, value=%d, rev=%d, lease=%v => rev=%d, kvrev=%d, updated=%v, err=%v", key, len(value), revision, lease, revRet, kvRev, updateRet, errRet)
 	}()
 
 	rev, event, err := l.get(ctx, key, 0, false)
@@ -270,7 +270,7 @@ func (l *LogStructured) ttlEvents(ctx context.Context) chan *server.Event {
 		rev, events, err := l.log.List(ctx, "/", "", 1000, 0, false)
 		for len(events) > 0 {
 			if err != nil {
-				logrus.Errorf("failed to read old events for ttl")
+				log.Errorf("failed to read old events for ttl")
 				return
 			}
 
@@ -310,7 +310,7 @@ func (l *LogStructured) ttl(ctx context.Context) {
 			}
 			mutex.Lock()
 			if _, _, _, err := l.Delete(ctx, event.KV.Key, event.KV.ModRevision); err != nil {
-				logrus.Errorf("failed to delete expired key: %v", err)
+				log.Errorf("failed to delete expired key: %v", err)
 			}
 			mutex.Unlock()
 		}(event)
@@ -318,7 +318,7 @@ func (l *LogStructured) ttl(ctx context.Context) {
 }
 
 func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64) <-chan []*server.Event {
-	logrus.Tracef("WATCH %s, revision=%d", prefix, revision)
+	log.Infof("WATCH %s, revision=%d", prefix, revision)
 
 	// starting watching right away so we don't miss anything
 	ctx, cancel := context.WithCancel(ctx)
@@ -333,11 +333,11 @@ func (l *LogStructured) Watch(ctx context.Context, prefix string, revision int64
 
 	rev, kvs, err := l.log.After(ctx, prefix, revision, 0)
 	if err != nil {
-		logrus.Errorf("failed to list %s for revision %d", prefix, revision)
+		log.Errorf("failed to list %s for revision %d", prefix, revision)
 		cancel()
 	}
 
-	logrus.Tracef("WATCH LIST key=%s rev=%d => rev=%d kvs=%d", prefix, revision, rev, len(kvs))
+	log.Infof("WATCH LIST key=%s rev=%d => rev=%d kvs=%d", prefix, revision, rev, len(kvs))
 
 	go func() {
 		lastRevision := revision

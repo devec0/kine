@@ -12,7 +12,7 @@ import (
 
 	"github.com/Rican7/retry/backoff"
 	"github.com/Rican7/retry/strategy"
-	"github.com/sirupsen/logrus"
+	log "k8s.io/klog/v2"
 )
 
 const (
@@ -127,14 +127,14 @@ func (d *Generic) Migrate(ctx context.Context) {
 		return
 	}
 
-	logrus.Infof("Migrating content from old table")
+	log.Infof("Migrating content from old table")
 	_, err := d.execute(ctx,
 		`INSERT INTO kine(deleted, create_revision, prev_revision, name, value, created, lease)
 					SELECT 0, 0, 0, kv.name, kv.value, 1, CASE WHEN kv.ttl > 0 THEN 15 ELSE 0 END
 					FROM key_value kv
 						WHERE kv.id IN (SELECT MAX(kvd.id) FROM key_value kvd GROUP BY kvd.name)`)
 	if err != nil {
-		logrus.Errorf("Migration failed: %v", err)
+		log.Errorf("Migration failed: %v", err)
 	}
 }
 
@@ -146,7 +146,7 @@ func configureConnectionPooling(connPoolConfig ConnectionPoolConfig, db *sql.DB,
 		connPoolConfig.MaxIdle = defaultMaxIdleConns
 	}
 
-	logrus.Infof("Configuring %s database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%s", driverName, connPoolConfig.MaxIdle, connPoolConfig.MaxOpen, connPoolConfig.MaxLifetime)
+	log.Infof("Configuring %s database connection pooling: maxIdleConns=%d, maxOpenConns=%d, connMaxLifetime=%s", driverName, connPoolConfig.MaxIdle, connPoolConfig.MaxOpen, connPoolConfig.MaxLifetime)
 	db.SetMaxIdleConns(connPoolConfig.MaxIdle)
 	db.SetMaxOpenConns(connPoolConfig.MaxOpen)
 	db.SetConnMaxLifetime(connPoolConfig.MaxLifetime)
@@ -180,7 +180,7 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 			break
 		}
 
-		logrus.Errorf("failed to ping connection: %v", err)
+		log.Errorf("failed to ping connection: %v", err)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -238,12 +238,12 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 }
 
 func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (*sql.Rows, error) {
-	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
+	log.Infof("QUERY %v : %s", args, Stripped(sql))
 	return d.DB.QueryContext(ctx, sql, args...)
 }
 
 func (d *Generic) queryRow(ctx context.Context, sql string, args ...interface{}) *sql.Row {
-	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
+	log.Infof("QUERY ROW %v : %s", args, Stripped(sql))
 	return d.DB.QueryRowContext(ctx, sql, args...)
 }
 
@@ -255,7 +255,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 
 	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
 	for i := uint(0); i < 20; i++ {
-		logrus.Tracef("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
+		log.Infof("EXEC (try: %d) %v : %s", i, args, Stripped(sql))
 		result, err = d.DB.ExecContext(ctx, sql, args...)
 		if err != nil && d.Retry != nil && d.Retry(err) {
 			wait(i)
@@ -277,13 +277,13 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
 }
 
 func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
-	logrus.Tracef("SETCOMPACTREVISION %v", revision)
+	log.Infof("SETCOMPACTREVISION %v", revision)
 	_, err := d.execute(ctx, d.UpdateCompactSQL, revision)
 	return err
 }
 
 func (d *Generic) Compact(ctx context.Context, revision int64) (int64, error) {
-	logrus.Tracef("COMPACT %v", revision)
+	log.Infof("COMPACT %v", revision)
 	res, err := d.execute(ctx, d.CompactSQL, revision, revision)
 	if err != nil {
 		return 0, err
@@ -296,7 +296,7 @@ func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, e
 }
 
 func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
-	logrus.Tracef("DELETEREVISION %v", revision)
+	log.Infof("DELETEREVISION %v", revision)
 	_, err := d.execute(ctx, d.DeleteSQL, revision)
 	return err
 }

@@ -6,12 +6,12 @@ import (
 	"database/sql"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/rancher/kine/pkg/drivers/generic"
-	"github.com/rancher/kine/pkg/logstructured"
-	"github.com/rancher/kine/pkg/logstructured/sqllog"
-	"github.com/rancher/kine/pkg/server"
-	"github.com/rancher/kine/pkg/tls"
-	"github.com/sirupsen/logrus"
+	"github.com/devec0/kine/pkg/drivers/generic"
+	"github.com/devec0/kine/pkg/logstructured"
+	"github.com/devec0/kine/pkg/logstructured/sqllog"
+	"github.com/devec0/kine/pkg/server"
+	"github.com/devec0/kine/pkg/tls"
+	log "k8s.io/klog/v2"
 )
 
 const (
@@ -101,10 +101,10 @@ func New(ctx context.Context, dataSourceName string, tlsInfo tls.Config, connPoo
 }
 
 func setup(db *sql.DB) error {
-	logrus.Infof("Configuring database table schema and indexes, this may take a moment...")
+	log.Infof("Configuring database table schema and indexes, this may take a moment...")
 
 	for _, stmt := range schema {
-		logrus.Tracef("SETUP EXEC : %v", generic.Stripped(stmt))
+		log.Infof("SETUP EXEC : %v", generic.Stripped(stmt))
 		_, err := db.Exec(stmt)
 		if err != nil {
 			if mysqlError, ok := err.(*mysql.MySQLError); !ok || mysqlError.Number != 1061 {
@@ -113,7 +113,7 @@ func setup(db *sql.DB) error {
 		}
 	}
 
-	logrus.Infof("Database tables and indexes are up to date")
+	log.Infof("Database tables and indexes are up to date")
 	return nil
 }
 

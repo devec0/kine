@@ -15,10 +15,10 @@ import (
 	"github.com/canonical/go-dqlite/client"
 	"github.com/canonical/go-dqlite/driver"
 	"github.com/pkg/errors"
-	"github.com/rancher/kine/pkg/drivers/generic"
-	"github.com/rancher/kine/pkg/drivers/sqlite"
-	"github.com/rancher/kine/pkg/server"
-	"github.com/sirupsen/logrus"
+	"github.com/devec0/kine/pkg/drivers/generic"
+	"github.com/devec0/kine/pkg/drivers/sqlite"
+	"github.com/devec0/kine/pkg/server"
+	log "k8s.io/klog/v2"
 )
 
 var (
@@ -37,6 +37,7 @@ type opts struct {
 	peers    []client.NodeInfo
 	peerFile string
 	dsn      string
+	driverName string // If not empty, use a pre-registered dqlite driver
 }
 
 func AddPeers(ctx context.Context, nodeStore client.NodeStore, additionalPeers ...client.NodeInfo) error {
@@ -68,6 +69,7 @@ outer:
 }
 
 func New(ctx context.Context, datasourceName string, connPoolConfig generic.ConnectionPoolConfig) (server.Backend, error) {
+        log.Info("Kine begins to create a new dqlite driver.")
 	opts, err := parseOpts(datasourceName)
 	if err != nil {
 		return nil, err
@@ -83,29 +85,39 @@ func New(ctx context.Context, datasourceName string, connPoolConfig generic.Conn
 		nodeStore = client.NewInmemNodeStore()
 	}
 
+        log.Info("Kine is adding dqlite peers.")
 	if err := AddPeers(ctx, nodeStore, opts.peers...); err != nil {
 		return nil, errors.Wrap(err, "add peers")
 	}
 
-	d, err := driver.New(nodeStore,
-		driver.WithLogFunc(Logger),
-		driver.WithContext(ctx),
-		driver.WithDialFunc(Dialer))
-	if err != nil {
-		return nil, errors.Wrap(err, "new dqlite driver")
+        log.Info("Kine is creating a new driver instance.")
+	if opts.driverName == "" {
+		opts.driverName = "dqlite"
+		d, err := driver.New(nodeStore,
+			driver.WithLogFunc(Logger),
+			driver.WithContext(ctx),
+			driver.WithDialFunc(Dialer))
+		if err != nil {
+			log.Error("Kine failed to create a new dqlite driver.")
+			return nil, errors.Wrap(err, "new dqlite driver")
+		}
+		sql.Register(opts.driverName, d)
 	}
 
-	sql.Register("dqlite", d)
-	backend, generic, err := sqlite.NewVariant(ctx, "dqlite", opts.dsn, connPoolConfig)
+        log.Info("Kine is creating a new SQL instance for dqlite.")
+	backend, generic, err := sqlite.NewVariant(ctx, opts.driverName, opts.dsn, connPoolConfig)
 	if err != nil {
+		log.Error("Kine failed to create a new dqlite SQL instance.")
 		return nil, errors.Wrap(err, "sqlite client")
 	}
 	if err := migrate(ctx, generic.DB); err != nil {
+		log.Error("Kine failed to migrate SQL data to the new dqlite SQL instance.")
 		return nil, errors.Wrap(err, "failed to migrate DB from sqlite")
 	}
 
 	generic.LockWrites = true
 	generic.Retry = func(err error) bool {
+		log.Info("Kine is retrying dqlite start operation.")
 		if err, ok := err.(driver.Error); ok {
 			return err.Code == driver.ErrBusy
 		}
@@ -118,10 +130,12 @@ func New(ctx context.Context, datasourceName string, connPoolConfig generic.Conn
 		return err
 	}
 
+	log.Info("Kine successfully created a new dqlite driver instance.")
 	return backend, nil
 }
 
 func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
+	log.Info("Kine is migrating data to dqlite.")
 	row := newDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM kine")
 	var count int64
 	if err := row.Scan(&count); err != nil {
@@ -143,7 +157,7 @@ func migrate(ctx context.Context, newDB *sql.DB) (exitErr error) {
 
 	oldData, err := oldDB.QueryContext(ctx, "SELECT id, name, created, deleted, create_revision, prev_revision, lease, value, old_value FROM kine")
 	if err != nil {
-		logrus.Errorf("failed to find old data to migrate: %v", err)
+		log.Errorf("failed to find old data to migrate: %v", err)
 		return nil
 	}
 	defer oldData.Close()
@@ -228,6 +242,9 @@ func parseOpts(dsn string) (opts, error) {
 			delete(values, k)
 		case "peer-file":
 			result.peerFile = vs[0]
+			delete(values, k)
+		case "driver-name":
+			result.driverName = vs[0]
 			delete(values, k)
 		}
 	}

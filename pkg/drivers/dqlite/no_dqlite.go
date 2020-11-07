@@ -6,8 +6,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/rancher/kine/pkg/drivers/generic"
-	"github.com/rancher/kine/pkg/server"
+	"github.com/devec0/kine/pkg/drivers/generic"
+	"github.com/devec0/kine/pkg/server"
 )
 
 func New(ctx context.Context, datasourceName string, connPoolConfig generic.ConnectionPoolConfig) (server.Backend, error) {

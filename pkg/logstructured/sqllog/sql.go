@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/rancher/kine/pkg/broadcaster"
-	"github.com/rancher/kine/pkg/drivers/generic"
-	"github.com/rancher/kine/pkg/server"
-	"github.com/sirupsen/logrus"
+	"github.com/devec0/kine/pkg/broadcaster"
+	"github.com/devec0/kine/pkg/drivers/generic"
+	"github.com/devec0/kine/pkg/server"
+	log "k8s.io/klog/v2"
 )
 
 const (
@@ -59,7 +59,7 @@ func (s *SQLLog) Start(ctx context.Context) (err error) {
 }
 
 func (s *SQLLog) compactStart(ctx context.Context) error {
-	logrus.Tracef("COMPACTSTART")
+	log.Infof("COMPACTSTART")
 
 	rows, err := s.d.After(ctx, "compact_rev_key", 0, 0)
 	if err != nil {
@@ -71,7 +71,7 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 		return err
 	}
 
-	logrus.Tracef("COMPACTSTART len(events)=%v", len(events))
+	log.Infof("COMPACTSTART len(events)=%v", len(events))
 
 	if len(events) == 0 {
 		_, err := s.Append(ctx, &server.Event{
@@ -100,11 +100,11 @@ func (s *SQLLog) compactStart(ctx context.Context) error {
 			maxRev = event.PrevKV.ModRevision
 			maxID = event.KV.ModRevision
 		}
-		logrus.Tracef("COMPACTSTART maxRev=%v maxID=%v", maxRev, maxID)
+		log.Infof("COMPACTSTART maxRev=%v maxID=%v", maxRev, maxID)
 	}
 
 	for _, event := range events {
-		logrus.Tracef("COMPACTSTART event.KV.ModRevision=%v maxID=%v", event.KV.ModRevision, maxID)
+		log.Infof("COMPACTSTART event.KV.ModRevision=%v maxID=%v", event.KV.ModRevision, maxID)
 		if event.KV.ModRevision == maxID {
 			continue
 		}
@@ -126,7 +126,7 @@ func (s *SQLLog) compactor(interval time.Duration) {
 	t := time.NewTicker(interval)
 	compactRev, _ := s.d.GetCompactRevision(s.ctx)
 	targetCompactRev, _ := s.d.CurrentRevision(s.ctx)
-	logrus.Tracef("COMPACT starting compactRev=%d targetCompactRev=%d", compactRev, targetCompactRev)
+	log.Infof("COMPACT starting compactRev=%d targetCompactRev=%d", compactRev, targetCompactRev)
 
 outer:
 	for {
@@ -167,7 +167,7 @@ outer:
 				if err == server.ErrCompacted {
 					break
 				} else {
-					logrus.Errorf("Compact failed: %v", err)
+					log.Errorf("Compact failed: %v", err)
 					continue outer
 				}
 			}
@@ -205,7 +205,7 @@ func (s *SQLLog) compact(compactRev int64, targetCompactRev int64) (int64, int64
 	}
 
 	if compactRev != dbCompactRev {
-		logrus.Tracef("COMPACT compact revision changed since last iteration: %d => %d", compactRev, dbCompactRev)
+		log.Infof("COMPACT compact revision changed since last iteration: %d => %d", compactRev, dbCompactRev)
 		return dbCompactRev, currentRev, server.ErrCompacted
 	}
 
@@ -214,11 +214,11 @@ func (s *SQLLog) compact(compactRev int64, targetCompactRev int64) (int64, int64
 
 	// Don't bother compacting to a revision that has already been compacted
 	if targetCompactRev <= compactRev {
-		logrus.Tracef("COMPACT revision %d has already been compacted", targetCompactRev)
+		log.Infof("COMPACT revision %d has already been compacted", targetCompactRev)
 		return dbCompactRev, currentRev, server.ErrCompacted
 	}
 
-	logrus.Tracef("COMPACT compactRev=%d targetCompactRev=%d currentRev=%d", compactRev, targetCompactRev, currentRev)
+	log.Infof("COMPACT compactRev=%d targetCompactRev=%d currentRev=%d", compactRev, targetCompactRev, currentRev)
 
 	start := time.Now()
 	deletedRows, err := t.Compact(s.ctx, targetCompactRev)
@@ -231,7 +231,7 @@ func (s *SQLLog) compact(compactRev int64, targetCompactRev int64) (int64, int64
 	}
 
 	t.MustCommit()
-	logrus.Debugf("COMPACT deleted %d rows from %d revisions in %s - compacted to %d/%d", deletedRows, (targetCompactRev - compactRev), time.Since(start), targetCompactRev, currentRev)
+	log.Infof("COMPACT deleted %d rows from %d revisions in %s - compacted to %d/%d", deletedRows, (targetCompactRev - compactRev), time.Since(start), targetCompactRev, currentRev)
 
 	return targetCompactRev, currentRev, nil
 }
@@ -410,13 +410,13 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 
 		rows, err := s.d.After(s.ctx, "%", last, pollBatchSize)
 		if err != nil {
-			logrus.Errorf("fail to list latest changes: %v", err)
+			log.Errorf("fail to list latest changes: %v", err)
 			continue
 		}
 
 		_, _, events, err := RowsToEvents(rows)
 		if err != nil {
-			logrus.Errorf("fail to convert rows changes: %v", err)
+			log.Errorf("fail to convert rows changes: %v", err)
 			continue
 		}
 
@@ -437,11 +437,11 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			// Ensure that we are notifying events in a sequential fashion. For example if we find row 4 before 3
 			// we don't want to notify row 4 because 3 is essentially dropped forever.
 			if event.KV.ModRevision != next {
-				logrus.Tracef("MODREVISION GAP: expected %v, got %v", next, event.KV.ModRevision)
+				log.Infof("MODREVISION GAP: expected %v, got %v", next, event.KV.ModRevision)
 				if canSkipRevision(next, skip, skipTime) {
 					// This situation should never happen, but we have it here as a fallback just for unknown reasons
 					// we don't want to pause all watches forever
-					logrus.Errorf("GAP %s, revision=%d, delete=%v, next=%d", event.KV.Key, event.KV.ModRevision, event.Delete, next)
+					log.Errorf("GAP %s, revision=%d, delete=%v, next=%d", event.KV.Key, event.KV.ModRevision, event.Delete, next)
 				} else if skip != next {
 					// This is the first time we have encountered this missing revision, so record time start
 					// and trigger a quick retry for simple out of order events
@@ -454,13 +454,13 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 					break
 				} else {
 					if err := s.d.Fill(s.ctx, next); err == nil {
-						logrus.Tracef("FILL, revision=%d, err=%v", next, err)
+						log.Infof("FILL, revision=%d, err=%v", next, err)
 						select {
 						case s.notify <- next:
 						default:
 						}
 					} else {
-						logrus.Tracef("FILL FAILED, revision=%d, err=%v", next, err)
+						log.Infof("FILL FAILED, revision=%d, err=%v", next, err)
 					}
 					break
 				}
@@ -474,10 +474,10 @@ func (s *SQLLog) poll(result chan interface{}, pollStart int64) {
 			saveLast = true
 			rev = event.KV.ModRevision
 			if s.d.IsFill(event.KV.Key) {
-				logrus.Tracef("NOT TRIGGER FILL %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
+				log.Infof("NOT TRIGGER FILL %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
 			} else {
 				sequential = append(sequential, event)
-				logrus.Tracef("TRIGGERED %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
+				log.Infof("TRIGGERED %s, revision=%d, delete=%v", event.KV.Key, event.KV.ModRevision, event.Delete)
 			}
 		}
 
