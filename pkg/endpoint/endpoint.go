@@ -87,8 +87,13 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 		log.Infof("Kine gRPC server is starting")
 		if err := grpcServer.Serve(listener); err != nil {
 			log.Errorf("Kine server shutdown: %v", err)
+			listener.Close()
 		}
+	}()
+
+	go func() {
 		<-ctx.Done()
+		log.Infof("Kine gRPC ctx exited stopping server")
 		grpcServer.Stop()
 		listener.Close()
 	}()
